@@ -41,10 +41,9 @@ pub fn sway_load_script(socket: Box<Path>, instance_manager: &InstanceManager, c
     };
 
     // Launch game instances in Sway
-    let mut sway_command = String::new();
-    sway_command.push_str("exec sh -c '");
-    sway_command.push_str(&cmd);
-    sway_command.push_str("'");
+    let sway_command = format!("exec '{}'", cmd);
+    
+    println!("Sway command game launch: {}", sway_command);
     
     match cmd_connection.run_command(sway_command) {
         Ok(_) => {},
@@ -54,9 +53,10 @@ pub fn sway_load_script(socket: Box<Path>, instance_manager: &InstanceManager, c
         }
     }
 
-    let mut current_row = 0;
-    let mut position_in_row = 0;
-    let mut row_capacity = instance_manager.get_row(0).len() as u32;
+    let mut instance_number: u32 = 0;
+    let mut current_row: u32 = 0;
+    let mut position_in_row: u32 = 0;
+    let mut row_capacity: u32 = instance_manager.get_row(0).len() as u32;
     
     for event_result in events {
         match event_result {
@@ -65,10 +65,13 @@ pub fn sway_load_script(socket: Box<Path>, instance_manager: &InstanceManager, c
             Ok(Event::Window(window_event)) if window_event.change == WindowChange::New => {
                 // Start a new row if needed
                 if position_in_row == 0 {
-                    if let Err(e) = position_new_row(&mut cmd_connection, window_event.container.id) {
+                    if let Err(e) = position_new_row(&mut cmd_connection, window_event.container.id, instance_number) {
                         eprintln!("Failed to position window: {}", e);
                     }
                 }
+
+                instance_number += 1;
+                position_in_row += 1;
 
                 // Move to next row if current is full
                 if position_in_row >= row_capacity {
@@ -76,8 +79,6 @@ pub fn sway_load_script(socket: Box<Path>, instance_manager: &InstanceManager, c
                     position_in_row = 0;
                     row_capacity = instance_manager.get_row(current_row).len() as u32;
                 }
-
-                position_in_row += 1;
             },
 
             Ok(Event::Shutdown(_)) => {
@@ -92,10 +93,14 @@ pub fn sway_load_script(socket: Box<Path>, instance_manager: &InstanceManager, c
     Ok(())
 }
 
-pub fn position_new_row(connection: &mut Connection, container_id: i64) -> Fallible<()> {
-    // Move window down to create a new row
-    let cmd = format!("[con_id={}] move down", container_id);
-    connection.run_command(&cmd)?;
+pub fn position_new_row(connection: &mut Connection, container_id: i64, instance_number: u32) -> Fallible<()> {
+    
+    // Don't move down if it's the first game instance
+    if instance_number != 0 {
+        // Move window down to create a new row
+        let cmd = format!("[con_id={}] move down", container_id);
+        connection.run_command(&cmd)?;
+    }
 
     // Make this row use horizontal split
     let cmd = format!("[con_id={}] splith", container_id);

@@ -1,5 +1,3 @@
-use crate::app::PartyConfig;
-use crate::util::get_screen_resolution;
 use crate::util::Resolution;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
@@ -28,14 +26,12 @@ impl Grid {
     }
     
     pub fn new(player_count: u32, resolution: Resolution) -> Grid {
-        let ratio = resolution.width as f32 / resolution.height as f32;
-
         let player_count_f = player_count as f32;
-        let cols_f = (player_count_f * ratio).sqrt().ceil();
-        let rows_f = (player_count_f / cols_f).ceil();
+        let rows_f = player_count_f.sqrt().ceil();
+        let cols_f = (player_count_f / rows_f).ceil();
 
-        let cols = cols_f as u32;
         let rows = rows_f as u32;
+        let cols = cols_f as u32;
         
         Grid { rows, cols, res: resolution }
     }
