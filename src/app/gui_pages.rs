@@ -122,7 +122,7 @@ impl PartyApp {
                     .max_height(16.0),
             );
             if ui.button("Play").clicked() {
-                self.instances.clear();
+                self.instance_manager.clear();
                 self.profiles = scan_profiles(true);
                 self.instance_add_dev = None;
                 self.cur_page = MenuPage::Instances;
@@ -195,7 +195,7 @@ impl PartyApp {
 
             ui.add(egui::Separator::default().vertical());
 
-            if self.instances.len() > 0 && self.instance_add_dev == None {
+            if self.instance_manager.items.len() > 0 && self.instance_add_dev == None {
                 ui.add(
                     egui::Image::new(egui::include_image!("../../res/BTN_NORTH.png"))
                         .max_height(12.0),
@@ -208,7 +208,7 @@ impl PartyApp {
         ui.separator();
 
         let mut devices_to_remove = Vec::new();
-        for (i, instance) in &mut self.instances.iter_mut().enumerate() {
+        for (i, instance) in &mut self.instance_manager.items.iter_mut().enumerate() {
             ui.horizontal(|ui| {
                 ui.label(format!("Instance {}", i + 1));
 
@@ -258,7 +258,7 @@ impl PartyApp {
             self.remove_device(d);
         }
 
-        if self.instances.len() > 0 {
+        if self.instance_manager.items.len() > 0 {
             ui.separator();
             ui.horizontal(|ui| {
                 ui.add(
@@ -296,6 +296,33 @@ impl PartyApp {
         if enable_kwin_script_check.hovered() {
             self.infotext = "Resizes/repositions instances to fit the screen using a KWin script. If unsure, leave this checked. If using a desktop environment or window manager other than KDE Plasma, uncheck this; note that you will need to manually resize and reposition the windows.".to_string();
         }
+
+        ui.horizontal(|ui| {
+            let filter_label = ui.label("Resizes/Reposition instances model");
+            let r1 = ui.radio_value(
+                &mut self.options.instance_layout_mode,
+                InstanceLayoutMode::KWin,
+                "KWin",
+            );
+            let r2 = ui.radio_value(
+                &mut self.options.instance_layout_mode,
+                InstanceLayoutMode::Sway,
+                "Sway",
+            );
+            let r3 = ui.radio_value(
+                &mut self.options.instance_layout_mode,
+                InstanceLayoutMode::Manual,
+                "Manual",
+            );
+
+            if filter_label.hovered() || r1.hovered() || r2.hovered() || r3.hovered() {
+                self.infotext = "FIXME".to_string();
+            }
+
+            if r1.clicked() || r2.clicked() || r3.clicked() {
+                self.input_devices = scan_input_devices(&self.options.pad_filter_type);
+            }
+        });
 
         if vertical_two_player_check.hovered() {
             self.infotext =

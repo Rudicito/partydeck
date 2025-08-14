@@ -24,7 +24,7 @@ pub struct LightPartyApp {
     pub infotext: String,
 
     pub input_devices: Vec<InputDevice>,
-    pub instances: Vec<Instance>,
+    pub instance_manager: InstanceManager,
     pub instance_add_dev: Option<usize>,
     pub game: Game,
 
@@ -44,7 +44,7 @@ impl LightPartyApp {
             cur_page: MenuPage::Instances,
             infotext: String::new(),
             input_devices,
-            instances: Vec::new(),
+            instance_manager: InstanceManager::new(),
             instance_add_dev: None,
             // Placeholder, user should define this with program args
             game: Game::ExecRef(Executable::new(PathBuf::from(exec), execargs)),
@@ -169,15 +169,16 @@ impl LightPartyApp {
                     match self.instance_add_dev {
                         Some(inst) => {
                             self.instance_add_dev = None;
-                            self.instances[inst].devices.push(i);
+                            self.instance_manager.items[inst].devices.push(i);
                         }
                         None => {
-                            self.instances.push(Instance {
+                            self.instance_manager.items.push(Instance {
                                 devices: vec![i],
                                 profname: String::new(),
                                 profselection: 0,
                                 width: 0,
                                 height: 0,
+                                gridposition: None,
                             });
                         }
                     }
@@ -197,7 +198,7 @@ impl LightPartyApp {
                     }
                 }
                 Some(PadButton::StartBtn) => {
-                    if self.instances.len() > 0 && self.is_device_in_any_instance(i) {
+                    if self.instance_manager.items.len() > 0 && self.is_device_in_any_instance(i) {
                         self.prepare_game_launch();
                     }
                 }
@@ -208,7 +209,7 @@ impl LightPartyApp {
     }
 
     fn is_device_in_any_instance(&mut self, dev: usize) -> bool {
-        for instance in &self.instances {
+        for instance in &self.instance_manager.items {
             if instance.devices.contains(&dev) {
                 return true;
             }
@@ -217,7 +218,7 @@ impl LightPartyApp {
     }
 
     fn find_device_in_instance(&mut self, dev: usize) -> Option<(usize, usize)> {
-        for (i, instance) in self.instances.iter().enumerate() {
+        for (i, instance) in self.instance_manager.items.iter().enumerate() {
             for (d, device) in instance.devices.iter().enumerate() {
                 if device == &dev {
                     return Some((i, d));
@@ -229,18 +230,18 @@ impl LightPartyApp {
 
     pub fn remove_device(&mut self, dev: usize) {
         if let Some((instance_index, device_index)) = self.find_device_in_instance(dev) {
-            self.instances[instance_index].devices.remove(device_index);
-            if self.instances[instance_index].devices.is_empty() {
-                self.instances.remove(instance_index);
+            self.instance_manager.items[instance_index].devices.remove(device_index);
+            if self.instance_manager.items[instance_index].devices.is_empty() {
+                self.instance_manager.items.remove(instance_index);
             }
         }
     }
 
     pub fn prepare_game_launch(&mut self) {
-        set_instance_resolutions(&mut self.instances, &self.options);
+        set_instance_resolutions(&mut self.instance_manager, &self.options);
 
         let game = self.game.to_owned();
-        let instances = self.instances.clone();
+        let instances = self.instance_manager.clone();
         let dev_infos: Vec<DeviceInfo> = self.input_devices.iter().map(|p| p.info()).collect();
 
         let cfg = self.options.clone();
@@ -267,7 +268,7 @@ impl LightPartyApp {
             ui.selectable_value(&mut self.cur_page, MenuPage::Settings, "Settings");
 
             if ui.button("🎮 Rescan").clicked() {
-                self.instances.clear();
+                self.instance_manager.clear();
                 self.input_devices = scan_input_devices(&self.options.pad_filter_type);
             }
 
@@ -349,6 +350,33 @@ impl LightPartyApp {
             &mut self.options.enable_kwin_script,
             "Automatically resize/reposition instances",
         );
+
+        ui.horizontal(|ui| {
+            let filter_label = ui.label("Resizes/Reposition instances model");
+            let r1 = ui.radio_value(
+                &mut self.options.instance_layout_mode,
+                InstanceLayoutMode::KWin,
+                "KWin",
+            );
+            let r2 = ui.radio_value(
+                &mut self.options.instance_layout_mode,
+                InstanceLayoutMode::Sway,
+                "Sway",
+            );
+            let r3 = ui.radio_value(
+                &mut self.options.instance_layout_mode,
+                InstanceLayoutMode::Manual,
+                "Manual",
+            );
+
+            if filter_label.hovered() || r1.hovered() || r2.hovered() || r3.hovered() {
+                self.infotext = "FIXME".to_string();
+            }
+
+            if r1.clicked() || r2.clicked() || r3.clicked() {
+                self.input_devices = scan_input_devices(&self.options.pad_filter_type);
+            }
+        });
 
         let vertical_two_player_check = ui.checkbox(
             &mut self.options.vertical_two_player,
@@ -472,7 +500,7 @@ impl LightPartyApp {
 
             ui.add(egui::Separator::default().vertical());
 
-            if self.instances.len() > 0 && self.instance_add_dev == None {
+            if self.instance_manager.items.len() > 0 && self.instance_add_dev == None {
                 ui.add(
                     egui::Image::new(egui::include_image!("../../res/BTN_NORTH.png"))
                         .max_height(12.0),
@@ -485,7 +513,7 @@ impl LightPartyApp {
         ui.separator();
 
         let mut devices_to_remove = Vec::new();
-        for (i, instance) in &mut self.instances.iter_mut().enumerate() {
+        for (i, instance) in &mut self.instance_manager.items.iter_mut().enumerate() {
             ui.horizontal(|ui| {
                 ui.label(format!("Instance {}", i + 1));
 
@@ -525,7 +553,7 @@ impl LightPartyApp {
             self.remove_device(d);
         }
 
-        if self.instances.len() > 0 {
+        if self.instance_manager.items.len() > 0 {
             ui.separator();
             ui.horizontal(|ui| {
                 ui.add(

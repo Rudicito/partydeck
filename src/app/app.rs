@@ -8,6 +8,7 @@ use crate::launch::launch_game;
 use crate::util::*;
 
 use eframe::egui::{self, Key};
+use crate::grid::GridPosition;
 
 #[derive(Eq, PartialEq)]
 pub enum MenuPage {
@@ -32,7 +33,7 @@ pub struct PartyApp {
     pub infotext: String,
 
     pub input_devices: Vec<InputDevice>,
-    pub instances: Vec<Instance>,
+    pub instance_manager: InstanceManager,
     pub instance_add_dev: Option<usize>,
     pub games: Vec<Game>,
     pub selected_game: usize,
@@ -61,7 +62,7 @@ impl Default for PartyApp {
             settings_page: SettingsPage::General,
             infotext: String::new(),
             input_devices,
-            instances: Vec::new(),
+            instance_manager: InstanceManager::new(),
             instance_add_dev: None,
             games: scan_all_games(),
             selected_game: 0,
@@ -197,7 +198,7 @@ impl PartyApp {
                 Some(PadButton::SelectBtn) => key = Some(Key::Tab),
                 Some(PadButton::StartBtn) => {
                     if self.cur_page == MenuPage::Game {
-                        self.instances.clear();
+                        self.instance_manager.clear();
                         self.profiles = scan_profiles(true);
                         self.instance_add_dev = None;
                         self.cur_page = MenuPage::Instances;
@@ -244,15 +245,16 @@ impl PartyApp {
                     match self.instance_add_dev {
                         Some(inst) => {
                             self.instance_add_dev = None;
-                            self.instances[inst].devices.push(i);
+                            self.instance_manager.items[inst].devices.push(i);
                         }
                         None => {
-                            self.instances.push(Instance {
+                            self.instance_manager.items.push(Instance {
                                 devices: vec![i],
                                 profname: String::new(),
                                 profselection: 0,
                                 width: 0,
                                 height: 0,
+                                gridposition: Some(GridPosition {row:0, col:0}),
                             });
                         }
                     }
@@ -262,7 +264,7 @@ impl PartyApp {
                         self.instance_add_dev = None;
                     } else if self.is_device_in_any_instance(i) {
                         self.remove_device(i);
-                    } else if self.instances.len() < 1 {
+                    } else if self.instance_manager.items.len() < 1 {
                         self.cur_page = MenuPage::Game;
                     }
                 }
@@ -274,7 +276,7 @@ impl PartyApp {
                     }
                 }
                 Some(PadButton::StartBtn) => {
-                    if self.instances.len() > 0 && self.is_device_in_any_instance(i) {
+                    if self.instance_manager.items.len() > 0 && self.is_device_in_any_instance(i) {
                         self.prepare_game_launch();
                     }
                 }
@@ -285,7 +287,7 @@ impl PartyApp {
     }
 
     fn is_device_in_any_instance(&mut self, dev: usize) -> bool {
-        for instance in &self.instances {
+        for instance in &self.instance_manager.items {
             if instance.devices.contains(&dev) {
                 return true;
             }
@@ -294,7 +296,7 @@ impl PartyApp {
     }
 
     fn find_device_in_instance(&mut self, dev: usize) -> Option<(usize, usize)> {
-        for (i, instance) in self.instances.iter().enumerate() {
+        for (i, instance) in self.instance_manager.items.iter().enumerate() {
             for (d, device) in instance.devices.iter().enumerate() {
                 if device == &dev {
                     return Some((i, d));
@@ -306,19 +308,19 @@ impl PartyApp {
 
     pub fn remove_device(&mut self, dev: usize) {
         if let Some((instance_index, device_index)) = self.find_device_in_instance(dev) {
-            self.instances[instance_index].devices.remove(device_index);
-            if self.instances[instance_index].devices.is_empty() {
-                self.instances.remove(instance_index);
+            self.instance_manager.items[instance_index].devices.remove(device_index);
+            if self.instance_manager.items[instance_index].devices.is_empty() {
+                self.instance_manager.items.remove(instance_index);
             }
         }
     }
 
     pub fn prepare_game_launch(&mut self) {
-        set_instance_resolutions(&mut self.instances, &self.options);
-        set_instance_names(&mut self.instances, &self.profiles);
+        set_instance_resolutions(&mut self.instance_manager, &self.options);
+        set_instance_names(&mut self.instance_manager.items, &self.profiles);
 
         let game = cur_game!(self).to_owned();
-        let instances = self.instances.clone();
+        let instance_manager = self.instance_manager.clone();
         let dev_infos: Vec<DeviceInfo> = self.input_devices.iter().map(|p| p.info()).collect();
 
         let cfg = self.options.clone();
@@ -329,7 +331,7 @@ impl PartyApp {
             "Launching...\n\nDon't press any buttons or move any analog sticks or mice.",
             move || {
                 sleep(std::time::Duration::from_secs(2));
-                if let Err(err) = launch_game(&game, &dev_infos, &instances, &cfg) {
+                if let Err(err) = launch_game(&game, &dev_infos, &instance_manager, &cfg) {
                     println!("{}", err);
                     msg("Launch Error", &format!("{err}"));
                 }

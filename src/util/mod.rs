@@ -3,6 +3,8 @@ mod filesystem;
 mod profiles;
 mod sys;
 mod updates;
+mod resolution;
+mod sway;
 
 // Re-export functions from profiles
 pub use profiles::{
@@ -17,3 +19,7 @@ pub use sys::{get_screen_resolution, kwin_dbus_start_script, kwin_dbus_unload_sc
 
 // Re-export functions from updates
 pub use updates::check_for_partydeck_update;
+
+pub use resolution::Resolution;
+
+pub use sway::{sway_load_script, get_sway_socket};

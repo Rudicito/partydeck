@@ -6,6 +6,7 @@ mod instance;
 mod launch;
 mod paths;
 mod util;
+mod grid;
 
 use crate::app::*;
 use crate::paths::PATH_PARTY;

@@ -36,7 +36,7 @@ impl PartyApp {
             }
 
             if ui.button("🎮 Rescan").clicked() {
-                self.instances.clear();
+                self.instance_manager.clear();
                 self.input_devices = scan_input_devices(&self.options.pad_filter_type);
             }
 

@@ -13,6 +13,13 @@ pub enum PadFilterType {
     OnlySteamInput,
 }
 
+#[derive(Serialize, Deserialize, Clone, PartialEq)]
+pub enum InstanceLayoutMode {
+    KWin,
+    Sway,
+    Manual,
+}
+
 #[derive(Serialize, Deserialize, Clone)]
 pub struct PartyConfig {
     pub force_sdl: bool,
@@ -25,6 +32,7 @@ pub struct PartyConfig {
     #[serde(default)]
     pub vertical_two_player: bool,
     pub pad_filter_type: PadFilterType,
+    pub instance_layout_mode: InstanceLayoutMode,
 }
 
 impl Default for PartyConfig {
@@ -39,6 +47,7 @@ impl Default for PartyConfig {
             proton_separate_pfxs: false,
             vertical_two_player: false,
             pad_filter_type: PadFilterType::NoSteamInput,
+            instance_layout_mode: InstanceLayoutMode::KWin,
         }
     }
 }

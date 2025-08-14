@@ -1,6 +1,8 @@
+use std::collections::HashSet;
 use std::path::PathBuf;
-
-use crate::app::PartyConfig;
+use std::thread;
+use std::time::Duration;
+use crate::app::{InstanceLayoutMode, PartyConfig};
 use crate::game::Game;
 use crate::handler::*;
 use crate::input::*;
@@ -12,11 +14,11 @@ use crate::util::*;
 pub fn launch_game(
     game: &Game,
     input_devices: &[DeviceInfo],
-    instances: &Vec<Instance>,
+    instance_manager: &InstanceManager,
     cfg: &PartyConfig,
 ) -> Result<(), Box<dyn std::error::Error>> {
     if let HandlerRef(h) = game {
-        for instance in instances {
+        for instance in &instance_manager.items {
             create_profile(instance.profname.as_str())?;
             create_gamesave(instance.profname.as_str(), &h)?;
         }
@@ -25,31 +27,84 @@ pub fn launch_game(
         }
     }
 
-    let cmd = launch_cmd(game, input_devices, instances, cfg)?;
+    let cmd = launch_cmd(game, input_devices, &instance_manager.items, cfg)?;
     println!("\nCOMMAND:\n{}\n", cmd);
+    
+    match cfg.instance_layout_mode {
+        
+        InstanceLayoutMode::KWin => {
+            let script = if instance_manager.items.len() == 2 && cfg.vertical_two_player {
+                "splitscreen_kwin_vertical.js"
+            } else {
+                "splitscreen_kwin.js"
+            };
 
-    if cfg.enable_kwin_script {
-        let script = if instances.len() == 2 && cfg.vertical_two_player {
-            "splitscreen_kwin_vertical.js"
-        } else {
-            "splitscreen_kwin.js"
-        };
+            kwin_dbus_start_script(PATH_RES.join(script))?;
 
-        kwin_dbus_start_script(PATH_RES.join(script))?;
+            std::process::Command::new("sh")
+                .arg("-c")
+                .arg(cmd)
+                .status()?;
+
+            kwin_dbus_unload_script()?;
+
+            remove_guest_profiles()?;
+
+            Ok(())
+        }
+        
+        InstanceLayoutMode::Sway => {
+            // Test if sway is installed
+            match std::process::Command::new("sway")
+                .arg("-v")
+                .output() 
+            {
+                Ok(_) => {}
+                Err(_) => {
+                    return Err("Sway is not installed".into())
+                }
+            }
+            
+            let socket_before: HashSet<_> = get_sway_socket()?.into_iter().collect();
+
+            // Launch Sway
+            std::process::Command::new("sway")
+                .arg("-c")
+                .arg("res/sway.cfg")
+                .spawn()?;
+            
+            // Loop to get new Sway socket
+            let sway_socket: PathBuf = loop {
+                let current: HashSet<_> = get_sway_socket()?.into_iter().collect();
+                let diff: Vec<_> = current.difference(&socket_before).cloned().collect();
+
+                if !diff.is_empty() {
+                    break diff[0].clone();
+                }
+
+                thread::sleep(Duration::from_millis(200));
+            };
+            
+            println!("Sway socket used: {}", sway_socket.display());
+            
+            sway_load_script(sway_socket.into(), instance_manager, cmd)?;
+
+            remove_guest_profiles()?;
+            
+            Ok(())
+        }
+        
+        InstanceLayoutMode::Manual => {
+            std::process::Command::new("sh")
+                .arg("-c")
+                .arg(cmd)
+                .status()?;
+
+            remove_guest_profiles()?;
+
+            Ok(())
+        }
     }
-
-    std::process::Command::new("sh")
-        .arg("-c")
-        .arg(cmd)
-        .status()?;
-
-    if cfg.enable_kwin_script {
-        kwin_dbus_unload_script()?;
-    }
-
-    remove_guest_profiles()?;
-
-    Ok(())
 }
 
 pub fn launch_cmd(
